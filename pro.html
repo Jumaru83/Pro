@@ -1,0 +1,194 @@
+﻿<!doctype html>
+<html lang="el">
+<head>
+<meta charset="utf-8"/>
+<title>Πειραματίζομαι με την Ιεραρχία Πράξεων</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+  body{font-family: Arial, Helvetica, sans-serif; max-width:900px;margin:18px auto;padding:12px;line-height:1.4;color:#111}
+  h1{font-size:1.4rem}
+  .box{border:1px solid #ddd;padding:12px;border-radius:8px;margin-bottom:12px;background:#fbfbfb}
+  label{display:block;margin:8px 0 4px}
+  input[type="text"]{width:100%;padding:8px;font-size:1rem;border:1px solid #ccc;border-radius:4px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  button{padding:8px 10px;border-radius:6px;border:1px solid #2b7;padding:6px 10px;background:#2b7;color:white;cursor:pointer}
+  button.secondary{background:#555;border-color:#444}
+  pre{background:#222;color:#fff;padding:10px;border-radius:6px;overflow:auto}
+  .result{font-weight:700;font-size:1.2rem;margin-top:8px}
+  .feedback{margin-top:8px;padding:8px;border-radius:6px}
+  .ok{background:#e6ffed;border:1px solid #6cc57a;color:#0b6f2e}
+  .bad{background:#fff0f0;border:1px solid #f09;color:#a00}
+  .examples button{background:#0366d6}
+  small{color:#666}
+</style>
+</head>
+<body>
+<h1>Πειραματίζομαι με την Ιεραρχία Πράξεων</h1>
+<div class="box">
+  <strong>Οδηγίες:</strong>
+  <ol>
+    <li>Πληκτρολόγησε μια αριθμητική παράσταση (π.χ. <code>8+4/2</code> ή <code>(8+4)/2</code>) ή επίλεξε ένα από τα κουμπιά.</li>
+    <li>Πάτησε <em>Υπολόγισε</em> για να δεις το αποτέλεσμα.</li>
+    <li>Συζήτησε με την ομάδα σου: ποια πράξη έγινε πρώτη;</li>
+  </ol>
+  <small>Χρησιμοποιήστε τα σύμβολα <code>*</code> για πολλαπλασιασμό και <code>/</code> για διαίρεση. Μπορείτε επίσης να γράφετε <code>×</code> και <code>:</code> — θα μετατραπούν αυτόματα.</small>
+</div>
+
+<div class="box">
+  <label for="expr">Εισαγωγή παράστασης:</label>
+  <input id="expr" type="text" placeholder="π.χ. 8+4/2 ή (8+4)/2" />
+  <div class="row" style="margin-top:10px">
+    <button id="calc">Υπολόγισε</button>
+    <button id="clear" class="secondary">Καθαρισμός</button>
+    <button id="swap" class="secondary">Αντικατάστησε ×,÷</button>
+  </div>
+  <div class="result" id="result">Αποτέλεσμα: <span id="resval">—</span></div>
+  <div id="feedback" class="feedback" style="display:none"></div>
+</div>
+
+<div class="box">
+  <strong>Προεπιλεγμένα παραδείγματα</strong>
+  <div class="row examples" style="margin-top:8px">
+    <button data-expr="8+4/2">8 + 4 : 2</button>
+    <button data-expr="(8+4)/2">(8 + 4) : 2</button>
+    <button data-expr="6+3*2">6 + 3 × 2</button>
+    <button data-expr="(6+3)*2">(6 + 3) × 2</button>
+    <button data-expr="12-4/2">12 - 4 : 2</button>
+    <button data-expr="(12-4)/2">(12 - 4) : 2</button>
+  </div>
+  <small>Κάνε κλικ για να φορτωθεί το παράδειγμα στο πεδίο εισόδου.</small>
+</div>
+
+<div class="box">
+  <strong>Επιβεβαίωση / Έλεγχος</strong>
+  <div style="margin-top:8px">
+    <label>Εισάγετε το αναμενόμενο αποτέλεσμα (προαιρετικό):</label>
+    <input id="expected" type="text" placeholder="π.χ. 6" />
+    <div class="row" style="margin-top:8px">
+      <button id="verify" class="secondary">Επαλήθευση</button>
+      <button id="explain" class="secondary">Δείξε Βήματα (απλό)</button>
+    </div>
+    <div id="verifyMsg" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<div class="box">
+  <strong>Σημειώσεις μαθητή (γρήγορο):</strong>
+  <textarea id="notes" rows="4" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ccc" placeholder="Γράψε εδώ πώς σκέφτηκες..."></textarea>
+</div>
+
+<script>
+(function(){
+  const exprInput = document.getElementById('expr');
+  const calcBtn = document.getElementById('calc');
+  const clearBtn = document.getElementById('clear');
+  const swapBtn = document.getElementById('swap');
+  const resVal = document.getElementById('resval');
+  const feedback = document.getElementById('feedback');
+  const expected = document.getElementById('expected');
+  const verifyBtn = document.getElementById('verify');
+  const verifyMsg = document.getElementById('verifyMsg');
+  const explainBtn = document.getElementById('explain');
+
+  function sanitizeForEval(s){
+    if(!s) return "";
+    s = s.replace(/×/g,'*').replace(/:/g,'/').replace(/÷/g,'/').replace(/,/g,'.');
+    if(/[^0-9+\-*/().\s]/.test(s)) return null;
+    return s;
+  }
+
+  function safeEval(expr){
+    const s = sanitizeForEval(expr);
+    if(s===null) throw new Error("Μη έγκυρο σύμβολο στην έκφραση.");
+    if(s.trim()==="") throw new Error("Κενή έκφραση.");
+    let balance = 0;
+    for(let ch of s){
+      if(ch==='(') balance++;
+      if(ch===')') balance--;
+      if(balance<0) throw new Error("Λανθασμένη παρένθεση.");
+    }
+    if(balance!==0) throw new Error("Λανθασμένη παρένθεση.");
+    return Function('"use strict";return ('+s+')')();
+  }
+
+  calcBtn.addEventListener('click', ()=>{
+    feedback.style.display='none';
+    verifyMsg.innerHTML='';
+    try{
+      const val = safeEval(exprInput.value);
+      resVal.textContent = val;
+    }catch(e){
+      resVal.textContent='—';
+      feedback.style.display='block';
+      feedback.className='feedback bad';
+      feedback.textContent = 'Σφάλμα: ' + e.message;
+    }
+  });
+
+  clearBtn.addEventListener('click', ()=>{
+    exprInput.value='';
+    resVal.textContent='—';
+    feedback.style.display='none';
+    verifyMsg.innerHTML='';
+  });
+
+  swapBtn.addEventListener('click', ()=>{
+    exprInput.value = exprInput.value.replace(/×/g,'*').replace(/÷/g,'/').replace(/:/g,'/');
+  });
+
+  document.querySelectorAll('.examples button').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      exprInput.value = b.getAttribute('data-expr');
+      calcBtn.click();
+    });
+  });
+
+  verifyBtn.addEventListener('click', ()=>{
+    verifyMsg.innerHTML='';
+    const expect = expected.value.trim();
+    if(expect===''){ verifyMsg.innerHTML = '<div class="bad">Δώστε αναμενόμενο αποτέλεσμα για έλεγχο.</div>'; return;}
+    try{
+      const val = safeEval(exprInput.value);
+      const expNum = Number(expect.replace(',','.'));
+      if(!isFinite(expNum)) throw new Error('Μη έγκυρος αριθμός αναμενόμενου αποτελέσματος.');
+      if(Math.abs(val - expNum) < 1e-9){
+        verifyMsg.innerHTML = '<div class="ok">Σωστό — το αποτέλεσμα συμφωνεί με την προσδοκία.</div>';
+      }else{
+        verifyMsg.innerHTML = '<div class="bad">Η απάντηση διαφέρει. Αποτέλεσμα: '+val+'</div>';
+      }
+    }catch(e){
+      verifyMsg.innerHTML = '<div class="bad">Σφάλμα κατά τον έλεγχο: '+e.message+'</div>';
+    }
+  });
+
+  explainBtn.addEventListener('click', ()=>{
+    try{
+      const s = sanitizeForEval(exprInput.value);
+      if(s===null) throw new Error("Μη έγκυρο σύμβολο στην έκφραση.");
+      let steps = [];
+      let temp = s;
+      while(/\([^\(\)]+\)/.test(temp)){
+        temp = temp.replace(/\([^\(\)]+\)/g, function(match){
+          try{
+            const inner = match.slice(1,-1);
+            const val = Function('"use strict";return ('+inner+')')();
+            steps.push(match + " = " + val);
+            return String(val);
+          }catch(e){
+            return match;
+          }
+        });
+      }
+      const finalVal = Function('"use strict";return ('+temp+')')();
+      if(steps.length===0) steps.push("Δεν υπάρχουν παρενθέσεις. Εκτέλεσε πρώτα × και /, μετά + και -.");
+      steps.push("Τελικό αποτέλεσμα: " + finalVal);
+      alert("Βήματα:\n\n" + steps.join("\n"));
+    }catch(e){
+      alert("Σφάλμα στην εξαγωγή βημάτων: " + e.message);
+    }
+  });
+
+})();
+</script>
+</body>
+</html>
